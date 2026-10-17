@@ -383,7 +383,7 @@ export function evaluateRain({ hourly, nowMs, startHour = 17, durationHours = 2,
   }
   const windowLabel = `${tomorrow ? "明天" : "今天"} ${hhmm(start)}–${hhmm(end)}`;
   const nowHour = mytMs(n.y, n.m, n.d, n.h);
-  let maxProb = -1, sum = 0, thunder = false, maxCape = null, maxFeels = null, covered = 0, recent = 0;
+  let maxProb = -1, sum = 0, thunder = false, maxCape = null, maxFeels = null, covered = 0, recent = 0, nowMm = 0;
   const bars = [];
   const H = hourly;
   for (let i = 0; i < H.time.length; i++) {
@@ -403,6 +403,7 @@ export function evaluateRain({ hourly, nowMs, startHour = 17, durationHours = 2,
       if (f != null) maxFeels = Math.max(maxFeels ?? f, f);
     }
     if (t > nowHour - 3 * 3600000 && t <= nowHour && mm > 0) recent += mm;
+    if (t === nowHour + 3600000) nowMm = mm; // the entry covering the current hour
     if (t > nowHour && t <= nowHour + 12 * 3600000) {
       const hc = p < 0 ? 0 : Math.round(applyShift(rainChance(1, p, mm, THUNDER.has(c), H.cape?.[i]), shift) * 100);
       bars.push({ label: pad2(myt(t).h), prob: hc });
@@ -437,13 +438,16 @@ export function evaluateRain({ hourly, nowMs, startHour = 17, durationHours = 2,
   }
   if (thunder) why.push("模型预报这个时段可能有雷暴");
 
-  let aqi = null;
+  let aqi = null, aqiNow = null, aqiDayMax = null;
+  const dayEnd = mytMs(n.y, n.m, n.d, 20);
   if (air && air.time) {
     for (let i = 0; i < air.time.length; i++) {
       const t = parseLocal(air.time[i]);
       const v = air.us_aqi?.[i];
       if (Number.isNaN(t) || v == null) continue;
       if (t > start - 3600000 && t <= end) aqi = Math.max(aqi ?? v, Math.round(v));
+      if (t === nowHour) aqiNow = Math.round(v);
+      if (t >= nowHour && t <= dayEnd) aqiDayMax = Math.max(aqiDayMax ?? v, Math.round(v));
     }
   }
   if (aqi != null) {
@@ -482,7 +486,8 @@ export function evaluateRain({ hourly, nowMs, startHour = 17, durationHours = 2,
   if (shift !== 0) why.push(`已按你的 ${samples} 条记录微调（你那边${shift > 0 ? "比预报更容易下雨" : "比预报更少下雨"}）`);
   if (!warningsOk) why.push("MET 警报没取到，这次只按预报判断");
   why.unshift(`${windowLabel} 下雨机会约 ${chance}%`, `Open-Meteo 原始概率 ${Math.max(maxProb, 0)}%、雨量 ${sumPrecip} mm；原始概率普遍偏高，已按梳邦站两年多的实况校准`);
-  return { level, windowLabel, tomorrow, reasons: why, chance, maxProb, sumPrecip, bars, feels, aqi, thunder, radar };
+  const rainingNow = radar ? !!radar.rainingHere : nowMm >= 1.0;
+  return { level, windowLabel, tomorrow, reasons: why, chance, maxProb, sumPrecip, bars, feels, aqi, thunder, radar, rainingNow, aqiNow, aqiDayMax };
 }
 
 export const LEVEL = {
@@ -594,3 +599,152 @@ export function globalPixel(lat, lng, z, tile) {
   const s = Math.sin(lat * RAD);
   return { x: ((lng + 180) / 360) * n * tile, y: (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n * tile };
 }
+
+// ------------------------------------------------------------------ everyday life (domain/SunTimes.kt, BallStats.kt, Holidays.kt, Fx.kt, DailyLife.kt)
+
+/** "YYYY-MM-DD" ↔ day number, so date maths needs no time zones. */
+export const dayNum = (iso) => Math.floor(Date.parse(iso + "T00:00:00Z") / 86400000);
+export const isoOf = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
+export const todayIso = (ms = Date.now()) => {
+  const p = myt(ms);
+  return `${p.y}-${pad2(p.m)}-${pad2(p.d)}`;
+};
+/** 1 = Monday … 7 = Sunday */
+export const weekday = (iso) => ((dayNum(iso) + 3) % 7 + 7) % 7 + 1;
+const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+const hmOf = (min) => `${pad2(Math.floor(min / 60))}:${pad2(Math.floor(min % 60))}`;
+
+/** NOAA solar calculator: minutes after local midnight for sunrise, sunset and civil dusk. */
+export function sunTimes(iso, lat, lng, tz = 8) {
+  const rad = (d) => d * RAD, deg = (r) => r / RAD;
+  const jd = dayNum(iso) + 2440587.5 + (12 - tz) / 24;
+  const t = (jd - 2451545) / 36525;
+  const l0 = (((280.46646 + t * (36000.76983 + t * 0.0003032)) % 360) + 360) % 360;
+  const m = 357.52911 + t * (35999.05029 - 0.0001537 * t);
+  const e = 0.016708634 - t * (0.000042037 + 0.0000001267 * t);
+  const c = Math.sin(rad(m)) * (1.914602 - t * (0.004817 + 0.000014 * t)) + Math.sin(rad(2 * m)) * (0.019993 - 0.000101 * t) + Math.sin(rad(3 * m)) * 0.000289;
+  const omega = 125.04 - 1934.136 * t;
+  const appLong = l0 + c - 0.00569 - 0.00478 * Math.sin(rad(omega));
+  const meanObliq = 23 + (26 + (21.448 - t * (46.815 + t * (0.00059 - t * 0.001813))) / 60) / 60;
+  const obliq = meanObliq + 0.00256 * Math.cos(rad(omega));
+  const decl = deg(Math.asin(Math.sin(rad(obliq)) * Math.sin(rad(appLong))));
+  const y = Math.tan(rad(obliq / 2)) ** 2;
+  const eqTime = 4 * deg(y * Math.sin(2 * rad(l0)) - 2 * e * Math.sin(rad(m)) + 4 * e * y * Math.sin(rad(m)) * Math.cos(2 * rad(l0)) - 0.5 * y * y * Math.sin(4 * rad(l0)) - 1.25 * e * e * Math.sin(2 * rad(m)));
+  const noon = 720 - 4 * lng - eqTime + tz * 60;
+  const ha = (z) => deg(Math.acos(Math.min(1, Math.max(-1, Math.cos(rad(z)) / (Math.cos(rad(lat)) * Math.cos(rad(decl))) - Math.tan(rad(lat)) * Math.tan(rad(decl))))));
+  const h = ha(90.833);
+  const round = (x) => Math.round(x * 60) / 60; // to the second, like the app
+  return { sunrise: round(noon - 4 * h), sunset: round(noon + 4 * h), dusk: round(noon + 4 * ha(96)) };
+}
+export function sunLine(sun, endHour) {
+  const base = `🌇 日落 ${hmOf(sun.sunset)}，${hmOf(sun.dusk)} 天黑`;
+  if (endHour == null) return base;
+  const endMin = endHour * 60;
+  const sunsetMin = Math.floor(sun.sunset);
+  if (endMin < sunsetMin - 90) return base;
+  if (endMin <= sunsetMin) return `${base} · 打到 ${pad2(endHour)}:00 天还亮`;
+  if (endMin <= Math.floor(sun.dusk)) return `${base} · 最后一会儿天会暗下来`;
+  return `${base} · 打到 ${pad2(endHour)}:00 得有灯`;
+}
+
+/** feedback: { "YYYY-MM-DD": "played" | "rained" } (one value per day, the last tap). */
+export function ballStats(feedback, today) {
+  const t = dayNum(today);
+  const [ty, tm] = today.split("-");
+  const played = Object.entries(feedback).filter(([d, v]) => v === "played" && dayNum(d) <= t).map(([d]) => d).sort();
+  const rained = Object.entries(feedback).filter(([, v]) => v === "rained").map(([d]) => d);
+  const inMonth = (d) => d.startsWith(`${ty}-${tm}-`);
+  const monday = (iso) => dayNum(iso) - (weekday(iso) - 1);
+  const weeks = new Set(played.map(monday));
+  let w = monday(today);
+  if (!weeks.has(w)) w -= 7;
+  let streak = 0;
+  while (weeks.has(w)) {
+    streak++;
+    w -= 7;
+  }
+  return { monthPlayed: played.filter(inMonth).length, monthRained: rained.filter(inMonth).length, weekStreak: streak, totalPlayed: played.length, lastPlayed: played[played.length - 1] ?? null };
+}
+export function ballSummary(s, today) {
+  if (s.totalPlayed === 0 && s.monthRained === 0) return "📊 还没有记录：打完球点一下「打成了」，这里会帮你统计";
+  const parts = [`本月打了 ${s.monthPlayed} 次`];
+  if (s.monthRained > 0) parts.push(`雨天 ${s.monthRained} 次`);
+  if (s.weekStreak >= 2) parts.push(`连续 ${s.weekStreak} 周都打了 🔥`);
+  else if (s.lastPlayed) {
+    const ago = dayNum(today) - dayNum(s.lastPlayed);
+    parts.push(ago === 0 ? "今天打了" : ago === 1 ? "上次是昨天" : `上次是 ${ago} 天前`);
+  }
+  return "📊 " + parts.join(" · ");
+}
+
+/** holidays.json → list with the Sunday replacement days added (Holidays Act 1951), per region. */
+export function withReplacements(list) {
+  const extra = [];
+  for (const region of new Set(list.flatMap((h) => h.regions))) {
+    const inRegion = list.filter((h) => h.regions.includes(region)).sort((a, b) => dayNum(a.date) - dayNum(b.date));
+    const taken = new Set(inRegion.map((h) => h.date));
+    for (const h of inRegion) {
+      if (weekday(h.date) !== 7) continue;
+      let d = dayNum(h.date) + 1;
+      while (taken.has(isoOf(d)) || weekday(isoOf(d)) === 7) d++;
+      taken.add(isoOf(d));
+      extra.push({ date: isoOf(d), name: h.name + "补假", regions: [region], tentative: !!h.tentative, replacement: true });
+    }
+  }
+  const merged = new Map();
+  for (const h of extra) {
+    const k = h.date + "|" + h.name;
+    if (merged.has(k)) merged.get(k).regions.push(...h.regions);
+    else merged.set(k, { ...h, regions: [...h.regions] });
+  }
+  return [...list.map((h) => ({ tentative: false, replacement: false, ...h })), ...merged.values()]
+    .sort((a, b) => dayNum(a.date) - dayNum(b.date) || Number(a.replacement) - Number(b.replacement));
+}
+export const holidaysOn = (list, iso) => list.filter((h) => h.date === iso);
+export const upcomingHolidays = (list, from, days) => list.filter((h) => dayNum(h.date) >= dayNum(from) && dayNum(h.date) < dayNum(from) + days);
+export const regionLabel = (r) => (r.includes("KUL") && r.includes("SGR") ? "雪州、吉隆坡" : r.includes("KUL") ? "仅吉隆坡" : "仅雪州");
+export const holidayLabel = (h) => `${h.name}（${regionLabel(h.regions)}${h.tentative ? "，日期以官方为准" : ""}）`;
+export const isWorkday = (list, iso) => weekday(iso) <= 5 && holidaysOn(list, iso).length === 0;
+export function busHolidayHint(list, today) {
+  const t = holidaysOn(list, today);
+  if (t.length) return `🎉 今天公共假期：${t.map(holidayLabel).join("、")} · 公交可能按假日班次，车会少一些`;
+  const m = holidaysOn(list, isoOf(dayNum(today) + 1));
+  if (m.length) return `📅 明天公共假期：${m.map(holidayLabel).join("、")}`;
+  return null;
+}
+export function holidayWhen(h, today) {
+  const days = dayNum(h.date) - dayNum(today);
+  const rel = days === 0 ? "今天" : days === 1 ? "明天" : days === 2 ? "后天" : `${days} 天后`;
+  const [, m, d] = h.date.split("-").map(Number);
+  return `${m}月${d}日 ${WEEKDAYS[weekday(h.date) - 1]} · ${rel}`;
+}
+
+/** Frankfurter series {rates:{date:{CNY:x}}} → points, oldest first. */
+export const fxPoints = (json) => Object.entries(json?.rates || {}).filter(([, v]) => v?.CNY != null).map(([date, v]) => ({ date, rate: v.CNY })).sort((a, b) => dayNum(a.date) - dayNum(b.date));
+export function fxView(points) {
+  if (!points.length) return null;
+  const latest = points[points.length - 1];
+  const L = dayNum(latest.date);
+  const month = points.filter((p) => dayNum(p.date) >= L - 30);
+  const since = (days) => {
+    const base = [...points].reverse().find((p) => dayNum(p.date) <= L - days);
+    return base ? (latest.rate / base.rate - 1) * 100 : null;
+  };
+  return { latest, change7: since(7), change30: since(30), min30: Math.min(...month.map((p) => p.rate)), max30: Math.max(...month.map((p) => p.rate)), points: month };
+}
+export function fxCheck(rate, target, above, armed, hysteresis = 0.003) {
+  const met = above ? rate >= target : rate <= target;
+  const back = above ? rate < target - hysteresis : rate > target + hysteresis;
+  if (met && armed) return { alert: true, armed: false };
+  if (!met && back) return { alert: false, armed: true };
+  return { alert: false, armed };
+}
+export const fxRate = (r) => r.toFixed(4);
+export const fxPct = (p) => (p >= 0 ? "+" : "−") + Math.abs(p).toFixed(1) + "%";
+
+export const PLAN_B_WAIT = 20;
+/** nextMin: minutes to the first bus, null = none within the hour. */
+export const planB = (rainingNow, nextMin) => !!rainingNow && (nextMin == null || nextMin >= PLAN_B_WAIT);
+export const planBText = (nextMin) => `🌧 正在下雨，${nextMin == null ? "一小时内都没看到车" : `下一班还要 ${nextMin} 分钟`}，要不要叫个 Grab？`;
+
+export const aqiLabel = (a) => (a <= 50 ? "好" : a <= 100 ? "一般" : a <= 150 ? "敏感人群注意" : a <= 200 ? "不健康" : a <= 300 ? "很不健康" : "危险");

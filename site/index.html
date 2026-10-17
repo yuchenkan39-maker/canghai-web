@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>季沧海助手</title>
-<meta name="description" content="T790 · T786 · PJ01 · PJ02 实时位置、到站倒计时和打球下雨指数">
+<meta name="description" content="T790 · T786 · PJ01 · PJ02 实时位置、到站倒计时、打球下雨指数、汇率和公共假期">
 <meta name="theme-color" content="#F6F7FB" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0F1117" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -133,6 +133,23 @@ select { font: inherit; color: var(--text); background: var(--surface2); border:
 .fb { display: flex; gap: 8px; margin-top: 12px; }
 .fb button { flex: 1; }
 hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+/* holiday hint, plan B, life card */
+.hint { margin-top: 10px; border-radius: 14px; padding: 10px 12px; background: var(--chip-on); color: var(--text); font-size: 14px; }
+.planb { margin-top: 10px; border-radius: 14px; padding: 12px; background: var(--caution-bg); color: var(--caution); }
+.planb p { margin: 0 0 8px; font-weight: 600; }
+.planb a { display: inline-block; text-decoration: none; border-radius: 12px; padding: 9px 14px; background: var(--surface); color: var(--text); font-weight: 700; }
+.sun { margin-top: 4px; }
+.stats { margin-top: 10px; }
+.rate { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
+.rate .big { font-size: 30px; font-weight: 800; letter-spacing: .5px; }
+.spark svg { width: 100%; height: 64px; display: block; margin-top: 6px; }
+.target { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.target input { font: inherit; color: var(--text); background: var(--surface2); border: 0; border-radius: 10px; padding: 8px 10px; min-height: 40px; width: 110px; }
+.target button { border: 0; border-radius: 10px; padding: 8px 12px; min-height: 40px; background: var(--surface2); }
+.target button.primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
+.ok { color: var(--good); font-weight: 600; margin-top: 6px; }
+.hol { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.hol + .hol { border-top: 1px solid var(--line); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 </style>
 </head>
@@ -142,7 +159,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
     <img src="icons/icon-192.png" alt="">
     <div class="grow">
       <h1>季沧海助手</h1>
-      <p>T790 · T786 · PJ01 · PJ02 实时位置 · 打球指数</p>
+      <p>T790 · T786 · PJ01 · PJ02 实时位置 · 打球指数 · 汇率假期</p>
     </div>
   </header>
 
@@ -169,7 +186,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
         </div>
         <div class="seg" role="tablist" id="trips"></div>
         <div class="muted small" id="trip-desc"></div>
+        <div id="holiday-hint"></div>
         <div id="arrivals"></div>
+        <div id="planb"></div>
         <div style="margin-top:12px"><button class="btn" id="alert-btn"></button></div>
         <div class="stepper">
           <button id="lead-minus" aria-label="少提前一分钟">−</button>
@@ -185,6 +204,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
           <button class="pill" id="ball-refresh" style="border:0">刷新</button>
         </div>
         <div class="muted small" id="ball-window"></div>
+        <div class="muted small sun" id="ball-sun"></div>
         <div id="ball-body"><p class="muted">正在获取天气…</p></div>
         <div class="settings">
           <span class="muted small">打球时段</span>
@@ -197,7 +217,25 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
           <button class="btn ghost" id="fb-played">🏀 打成了</button>
           <button class="btn ghost" id="fb-rained">🌧 下雨了</button>
         </div>
-        <div class="muted small" id="fb-count" style="margin-top:8px"></div>
+        <div class="stats" id="fb-stats"></div>
+        <div class="muted small" id="fb-count" style="margin-top:4px"></div>
+      </div>
+
+      <div class="card" id="life">
+        <h2>💱 汇率 · 📅 假期</h2>
+        <div id="fx"><p class="muted">正在获取汇率…</p></div>
+        <div class="target">
+          <span class="muted small">到价提示</span>
+          <select id="fx-dir" aria-label="涨到还是跌到"><option value="up">涨到</option><option value="down">跌到</option></select>
+          <input id="fx-target" type="number" inputmode="decimal" step="0.001" min="1" max="3" aria-label="目标汇率">
+          <button class="primary" id="fx-save">保存</button>
+          <button id="fx-off">关闭</button>
+        </div>
+        <p class="note">欧洲央行参考价，每个工作日更新；实际换汇以银行或 Wise 报价为准。网页开着时到价会提示，每天早上的后台提醒请用手机 App。</p>
+        <hr>
+        <div class="small" style="font-weight:600">接下来的公共假期（雪州、吉隆坡）</div>
+        <div id="holidays"><p class="muted small">正在读取…</p></div>
+        <p class="note">假期来自首相署公布的官方名单；周日的假期次日补假。</p>
       </div>
     </section>
   </div>

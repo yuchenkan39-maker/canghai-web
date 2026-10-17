@@ -2,7 +2,9 @@
 import {
   ROUTES, ROUTE_IDS, routeById, routeOrder, TRIPS, tripForHour, myt, hhmm, pad2, loadBundle, RouteIndex, towards,
   DepartureAlerter, etaText, WS_URL, reloadFrame, parseFrame, parseBuses, evaluateRain, LEVEL, radarSummary,
-  nowcast, globalPixel, fitShift, PERSONAL_MIN,
+  nowcast, globalPixel, fitShift, PERSONAL_MIN, sunTimes, sunLine, ballStats, ballSummary, withReplacements,
+  busHolidayHint, upcomingHolidays, holidayWhen, regionLabel, fxPoints, fxView, fxCheck, fxRate, fxPct, planB, planBText,
+  aqiLabel, todayIso, dayNum, isoOf,
 } from "./core.js";
 
 const LAT = 3.1209, LNG = 101.6538; // Universiti Malaya
@@ -49,6 +51,8 @@ const state = {
   duration: store.get("duration", 2),
   weather: null,
   radarMeta: null,
+  holidays: [],
+  fx: null,
 };
 
 // ------------------------------------------------------------------ toast, sound, notifications
@@ -472,14 +476,37 @@ function renderTrips() {
   $("trip-desc").textContent = `在 ${t.stopName} 上车 · ` + ROUTES.filter((r) => t.routes.includes(r.id)).map((r) => r.name).join(" / ");
 }
 
+const GRAB_WEB = "https://www.grab.com/my/transport/";
+// Android Chrome opens the Grab app through its grab:// link, or the website when it is not installed
+const GRAB_HREF = /Android/i.test(navigator.userAgent)
+  ? `intent://open#Intent;scheme=grab;package=com.grabtaxi.passenger;S.browser_fallback_url=${encodeURIComponent(GRAB_WEB)};end`
+  : GRAB_WEB;
+
+function renderPlanB(arr) {
+  const el = $("planb");
+  const next = arr ? (arr.length ? arr[0].minutes : null) : undefined;
+  if (next === undefined || !planB(state.weather?.rainingNow, next)) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = `<div class="planb"><p>${esc(planBText(next))}</p><a href="${GRAB_HREF}" target="_blank" rel="noopener">🚕 打开 Grab</a></div>`;
+}
+
+function renderHolidayHint() {
+  const h = busHolidayHint(state.holidays, todayIso());
+  $("holiday-hint").innerHTML = h ? `<div class="hint">${esc(h)}</div>` : "";
+}
+
 function renderDepartures() {
   const t = currentTrip();
   const el = $("arrivals");
   if (!state.connected || !state.index) {
     el.innerHTML = `<p class="muted">${esc(state.connected ? "正在计算…" : state.status)}</p>`;
+    renderPlanB(null);
     return;
   }
   const arr = state.index.arrivals(t.stopCode, t.routes, allBuses());
+  renderPlanB(arr);
   if (!arr.length) {
     el.innerHTML = `<p>一小时内暂时没有车开往这里 🚌💤</p>`;
   } else {
@@ -682,7 +709,16 @@ function chartSvg(bars) {
   return s + "</svg>";
 }
 
+function renderSun() {
+  const today = todayIso();
+  const r = state.weather;
+  const sun = sunTimes(r?.tomorrow ? isoOf(dayNum(today) + 1) : today, LAT, LNG);
+  $("ball-sun").textContent = sunLine(sun, r?.tomorrow ? null : state.startHour + state.duration);
+}
+
 function renderWeather() {
+  renderSun();
+  renderDepartures(); // Plan B depends on whether it is raining now
   const r = state.weather;
   $("ball-window").textContent = (r?.windowLabel || `打球时段 ${pad2(state.startHour)}:00 起`) + " · 马大附近" + (r?.updatedAt ? ` · ${hhmm(r.updatedAt)} 更新` : "");
   if (!r) return;
@@ -690,8 +726,8 @@ function renderWeather() {
   const conds = [];
   if (r.feels != null) conds.push(`<span class="pill ${r.feels >= 42 ? "bad" : r.feels >= 39 ? "caution" : ""}">🌡 体感 ${r.feels}°C</span>`);
   if (r.aqi != null) {
-    const [lab, cls] = r.aqi <= 50 ? ["好", "good"] : r.aqi <= 100 ? ["一般", ""] : r.aqi <= 150 ? ["敏感人群注意", "caution"] : ["差", "bad"];
-    conds.push(`<span class="pill ${cls}">🌫 空气 ${r.aqi} · ${lab}</span>`);
+    const cls = r.aqi <= 50 ? "good" : r.aqi <= 100 ? "" : r.aqi <= 150 ? "caution" : "bad";
+    conds.push(`<span class="pill ${cls}">🌫 空气 ${r.aqi} · ${aqiLabel(r.aqi)}</span>`);
   }
   const rd = r.radar;
   const radarLine = rd ? `<div class="radar-line${rd.rainingHere || rd.etaMin != null ? " warn" : " muted"}">📡 雷达（${hhmm(rd.frameTimeSec * 1000)}）：${esc(radarSummary(rd))}</div>` : "";
@@ -704,11 +740,11 @@ function renderWeather() {
 }
 
 function renderFeedbackCount() {
-  const fb = Object.values(store.get("feedback", {}));
-  const played = fb.filter((x) => x === "played").length;
-  const rained = fb.filter((x) => x === "rained").length;
+  const fbMap = store.get("feedback", {});
+  const fb = Object.values(fbMap);
   const { samples } = personal();
-  $("fb-count").textContent = `已记录：打成了 ${played} 天 · 下雨 ${rained} 天` + (samples < PERSONAL_MIN ? `（满 ${PERSONAL_MIN} 天后按你的球场微调）` : " · 已按你的记录微调");
+  $("fb-stats").textContent = ballSummary(ballStats(fbMap, todayIso()), todayIso());
+  $("fb-count").textContent = `共记录 ${fb.length} 天` + (samples < PERSONAL_MIN ? `（满 ${PERSONAL_MIN} 天后按你的球场微调）` : " · 已按你的记录微调");
 }
 function record(label) {
   const n = myt();
@@ -721,6 +757,113 @@ function record(label) {
 $("fb-played").onclick = () => record("played");
 $("fb-rained").onclick = () => record("rained");
 $("ball-refresh").onclick = () => loadWeather();
+
+// ------------------------------------------------------------------ public holidays, exchange rate
+
+async function loadHolidays() {
+  try {
+    state.holidays = withReplacements((await getJson("holidays.json")).holidays || []);
+  } catch (e) {
+    state.holidays = [];
+    $("holidays").innerHTML = `<p class="muted small">假期名单读取失败</p>`;
+    return;
+  }
+  renderHolidayHint();
+  renderHolidays();
+}
+
+function renderHolidays() {
+  const today = todayIso();
+  const next = upcomingHolidays(state.holidays, today, 90).slice(0, 4);
+  $("holidays").innerHTML = next.length
+    ? next.map((h) => `<div class="hol"><div class="grow"><div>${esc(h.name)}${h.tentative ? '<span class="muted small">（日期以官方为准）</span>' : ""}</div><div class="muted small">${esc(holidayWhen(h, today))}</div></div><span class="pill">${esc(regionLabel(h.regions))}</span></div>`).join("")
+    : `<p class="muted small">90 天内没有公共假期</p>`;
+}
+
+const fxSettings = () => ({ target: store.get("fxTarget", null), above: store.get("fxAbove", true), armed: store.get("fxArmed", true) });
+
+async function loadFx() {
+  const start = isoOf(dayNum(todayIso()) - 45);
+  try {
+    state.fx = fxView(fxPoints(await getJson(`https://api.frankfurter.app/${start}..?from=MYR&to=CNY`)));
+  } catch (e) {
+    if (!state.fx) $("fx").innerHTML = `<p class="muted">汇率暂时没取到，稍后再看</p>`;
+    return;
+  }
+  renderFx();
+  // tell once when the rate reaches the target (the app does this every morning in the background)
+  const f = fxSettings();
+  if (state.fx && f.target != null) {
+    const d = fxCheck(state.fx.latest.rate, f.target, f.above, f.armed);
+    store.set("fxArmed", d.armed);
+    if (d.alert) notify("💱 汇率到了", `1 令吉 = ${fxRate(state.fx.latest.rate)} 元，已${f.above ? "涨到" : "跌到"}你设的 ${fxRate(f.target)}`);
+  }
+}
+
+function sparkSvg(v, target) {
+  const W = 360, H = 64, pad = 4;
+  let lo = v.min30, hi = v.max30;
+  if (target != null && target >= lo - (hi - lo) && target <= hi + (hi - lo)) {
+    lo = Math.min(lo, target);
+    hi = Math.max(hi, target);
+  }
+  if (hi - lo < 1e-6) {
+    lo -= 0.001;
+    hi += 0.001;
+  }
+  const pts = v.points;
+  const d0 = dayNum(pts[0].date);
+  const span = Math.max(1, dayNum(pts[pts.length - 1].date) - d0);
+  const x = (p) => (pad + ((W - 2 * pad) * (dayNum(p.date) - d0)) / span).toFixed(1);
+  const y = (r) => (pad + (H - 2 * pad) * (1 - (r - lo) / (hi - lo))).toFixed(1);
+  let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="近 30 天汇率，最低 ${fxRate(v.min30)}，最高 ${fxRate(v.max30)}">`;
+  s += `<line x1="0" y1="${H - 0.5}" x2="${W}" y2="${H - 0.5}" stroke="var(--line)"/>`;
+  if (target != null && target >= lo && target <= hi) s += `<line x1="0" y1="${y(target)}" x2="${W}" y2="${y(target)}" stroke="var(--caution)" stroke-width="1.5" stroke-dasharray="6 4"/>`;
+  s += `<polyline fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="${pts.map((p) => `${x(p)},${y(p.rate)}`).join(" ")}"/>`;
+  const last = pts[pts.length - 1];
+  return s + `<circle cx="${x(last)}" cy="${y(last.rate)}" r="4" fill="var(--primary)"/></svg>`;
+}
+
+function renderFx() {
+  const v = state.fx;
+  const f = fxSettings();
+  $("fx-dir").value = f.above ? "up" : "down";
+  if (f.target != null) $("fx-target").value = f.target.toFixed(3);
+  else if (v && !$("fx-target").value) $("fx-target").value = (v.latest.rate * 1.01).toFixed(3);
+  if (!v) return;
+  const changes = [v.change7 != null ? `一周 ${fxPct(v.change7)}` : null, v.change30 != null ? `一个月 ${fxPct(v.change30)}` : null].filter(Boolean);
+  const [, m, d] = v.latest.date.split("-").map(Number);
+  const met = f.target != null && (f.above ? v.latest.rate >= f.target : v.latest.rate <= f.target);
+  $("fx").innerHTML = `
+    <div class="rate"><span>1 令吉 =</span><span class="big">${fxRate(v.latest.rate)}</span><span>元</span></div>
+    <div>1000 令吉 ≈ ${Math.round(v.latest.rate * 1000)} 元${changes.length ? " · " + changes.join(" · ") : ""}</div>
+    ${v.points.length >= 3 ? `<div class="spark">${sparkSvg(v, f.target)}</div><div class="muted small">近 30 天：最低 ${fxRate(v.min30)} · 最高 ${fxRate(v.max30)} · 更新到 ${m}月${d}日</div>` : ""}
+    ${f.target != null ? `<div class="${met ? "ok" : "muted small"}">${met ? "✅ 现在已经" + (f.above ? "高于" : "低于") + "目标价 " + fxRate(f.target) : "🔔 " + (f.above ? "涨到" : "跌到") + " " + fxRate(f.target) + " 时提示"}</div>` : ""}`;
+}
+
+$("fx-save").onclick = () => {
+  const t = parseFloat($("fx-target").value);
+  if (!(t > 0.5 && t < 5)) {
+    toast("请输入像 1.650 这样的汇率");
+    return;
+  }
+  const above = $("fx-dir").value === "up";
+  const rate = state.fx?.latest.rate;
+  store.set("fxTarget", t);
+  store.set("fxAbove", above);
+  // already past the target: don't announce what is on screen, wait for the next crossing
+  store.set("fxArmed", rate == null || !(above ? rate >= t : rate <= t));
+  unlockAudio();
+  renderFx();
+  toast(`1 令吉${above ? "涨到" : "跌到"} ${fxRate(t)} 元时提示你（网页开着时）`);
+};
+$("fx-off").onclick = () => {
+  store.set("fxTarget", null);
+  store.set("fxArmed", true);
+  $("fx-target").value = "";
+  renderFx();
+  toast("已关闭汇率提示");
+};
 
 function setupWindowSelects() {
   const sh = $("start-hour");
@@ -750,6 +893,7 @@ async function main() {
   renderDepartures();
   setupWindowSelects();
   renderFeedbackCount();
+  renderSun();
   try {
     state.bundle = loadBundle(await getJson("routes.json"));
     state.index = new RouteIndex(state.bundle.lines);
@@ -761,12 +905,23 @@ async function main() {
   }
   new Feed(ROUTE_IDS).start();
   loadWeather();
+  loadHolidays();
+  loadFx();
   setInterval(loadWeather, 10 * 60000);
-  // the trip switches by itself at 1 pm unless you picked one
+  setInterval(loadFx, 3 * 3600000);
+  // the trip switches by itself at 1 pm unless you picked one; the date can change too
+  let day = todayIso();
   setInterval(() => {
     if (!state.tripChoice) {
       renderTrips();
       renderDepartures();
+    }
+    if (todayIso() !== day) {
+      day = todayIso();
+      renderHolidayHint();
+      renderHolidays();
+      renderFeedbackCount();
+      renderSun();
     }
   }, 60000);
   darkMq.addEventListener?.("change", () => {

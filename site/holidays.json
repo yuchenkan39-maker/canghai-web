@@ -1,0 +1,30 @@
+{
+  "source": "Jabatan Perdana Menteri · Jadual Hari Kelepasan Am Persekutuan & Negeri 2026, 2027",
+  "updated": "2026-10-17",
+  "note": "Only holidays in Kuala Lumpur (KUL) and Selangor (SGR). Replacement days for holidays on a Sunday are worked out by the app.",
+  "holidays": [
+    { "date": "2026-11-08", "name": "屠妖节", "ms": "Hari Deepavali", "regions": ["KUL", "SGR"], "tentative": true },
+    { "date": "2026-12-11", "name": "雪兰莪苏丹诞辰", "ms": "Hari Keputeraan Sultan Selangor", "regions": ["SGR"] },
+    { "date": "2026-12-25", "name": "圣诞节", "ms": "Hari Krismas", "regions": ["KUL", "SGR"] },
+
+    { "date": "2027-01-01", "name": "元旦", "ms": "Tahun Baharu", "regions": ["KUL", "SGR"] },
+    { "date": "2027-01-22", "name": "大宝森节", "ms": "Hari Thaipusam", "regions": ["KUL", "SGR"] },
+    { "date": "2027-02-01", "name": "联邦直辖区日", "ms": "Hari Wilayah Persekutuan", "regions": ["KUL"] },
+    { "date": "2027-02-06", "name": "春节", "ms": "Tahun Baharu Cina", "regions": ["KUL", "SGR"] },
+    { "date": "2027-02-07", "name": "春节第二天", "ms": "Tahun Baharu Cina (Hari Kedua)", "regions": ["KUL", "SGR"] },
+    { "date": "2027-02-24", "name": "可兰经降世日", "ms": "Hari Nuzul Al-Quran", "regions": ["KUL", "SGR"] },
+    { "date": "2027-03-10", "name": "开斋节", "ms": "Hari Raya Puasa", "regions": ["KUL", "SGR"], "tentative": true },
+    { "date": "2027-03-11", "name": "开斋节第二天", "ms": "Hari Raya Puasa (Hari Kedua)", "regions": ["KUL", "SGR"], "tentative": true },
+    { "date": "2027-05-01", "name": "劳动节", "ms": "Hari Pekerja", "regions": ["KUL", "SGR"] },
+    { "date": "2027-05-17", "name": "哈芝节", "ms": "Hari Raya Qurban", "regions": ["KUL", "SGR"], "tentative": true },
+    { "date": "2027-05-20", "name": "卫塞节", "ms": "Hari Wesak", "regions": ["KUL", "SGR"] },
+    { "date": "2027-06-06", "name": "回历新年", "ms": "Awal Muharam (Maal Hijrah)", "regions": ["KUL", "SGR"] },
+    { "date": "2027-06-07", "name": "最高元首诞辰", "ms": "Hari Keputeraan Rasmi Seri Paduka Baginda Yang di-Pertuan Agong", "regions": ["KUL", "SGR"] },
+    { "date": "2027-08-15", "name": "先知穆罕默德诞辰", "ms": "Maulidur Rasul", "regions": ["KUL", "SGR"] },
+    { "date": "2027-08-31", "name": "国庆日", "ms": "Hari Kebangsaan", "regions": ["KUL", "SGR"] },
+    { "date": "2027-09-16", "name": "马来西亚日", "ms": "Hari Malaysia", "regions": ["KUL", "SGR"] },
+    { "date": "2027-10-28", "name": "屠妖节", "ms": "Hari Deepavali", "regions": ["KUL", "SGR"], "tentative": true },
+    { "date": "2027-12-11", "name": "雪兰莪苏丹诞辰", "ms": "Hari Keputeraan Sultan Selangor", "regions": ["SGR"] },
+    { "date": "2027-12-25", "name": "圣诞节", "ms": "Hari Krismas", "regions": ["KUL", "SGR"] }
+  ]
+}
