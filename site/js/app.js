@@ -532,8 +532,13 @@ $("lead-plus").onclick = () => setLead(state.lead + 1);
 
 // ------------------------------------------------------------------ weather, radar, basketball
 
-async function getJson(url) {
-  const r = await fetch(url);
+/** fetch with a time limit, so one slow source never holds up the page */
+function fetchT(url, ms = 12000) {
+  const opts = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? { signal: AbortSignal.timeout(ms) } : {};
+  return fetch(url, opts);
+}
+async function getJson(url, ms) {
+  const r = await fetchT(url, ms);
   if (!r.ok) throw new Error("HTTP " + r.status);
   return r.json();
 }
@@ -565,13 +570,22 @@ async function loadRadar() {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = TILE;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const tiles = [];
+  for (let ty = Math.floor(y0 / TILE); ty <= Math.floor((y0 + size - 1) / TILE); ty++) {
+    for (let tx = Math.floor(x0 / TILE); tx <= Math.floor((x0 + size - 1) / TILE); tx++) tiles.push([tx, ty]);
+  }
+  // download every tile of every frame at once, then decode
+  const images = await Promise.all(past.map((f) => Promise.all(tiles.map(async ([tx, ty]) => {
+    const r = await fetchT(`${maps.host}${f.path}/${TILE}/${Z}/${tx}/${ty}/2/1_1.png`, 15000);
+    if (!r.ok) throw new Error("radar " + r.status);
+    return createImageBitmap(await r.blob());
+  }))));
   const frames = [];
-  for (const f of past) {
+  for (const [fi, f] of past.entries()) {
     const rain = new Uint8Array(size * size);
-    for (let ty = Math.floor(y0 / TILE); ty <= Math.floor((y0 + size - 1) / TILE); ty++) {
-      for (let tx = Math.floor(x0 / TILE); tx <= Math.floor((x0 + size - 1) / TILE); tx++) {
-        const blob = await (await fetch(`${maps.host}${f.path}/${TILE}/${Z}/${tx}/${ty}/2/1_1.png`)).blob();
-        const bmp = await createImageBitmap(blob);
+    for (const [ti, [tx, ty]] of tiles.entries()) {
+      {
+        const bmp = images[fi][ti];
         if (bmp.width !== TILE || bmp.height !== TILE) throw new Error("radar tile size");
         ctx.clearRect(0, 0, TILE, TILE);
         ctx.drawImage(bmp, 0, 0);
@@ -603,40 +617,50 @@ function personal() {
 }
 
 let weatherBusy = false;
+let lastInputs = null;
+function evaluate(radar) {
+  if (!lastInputs) return;
+  const { fc, air, warnings } = lastInputs;
+  const { shift, samples } = personal();
+  const r = evaluateRain({
+    hourly: fc?.hourly, nowMs: Date.now(), startHour: state.startHour, durationHours: state.duration,
+    warnings: warnings || [], warningsOk: warnings != null, air: air?.hourly, shift, samples, radar,
+  });
+  r.updatedAt = Date.now();
+  state.weather = r;
+  if (r.level !== "unknown" && !r.tomorrow) {
+    // remember today's prediction, so a later 打成了/下雨了 tap is paired with it
+    const n = myt();
+    const fcs = store.get("forecasts", {});
+    fcs[`${n.y}-${pad2(n.m)}-${pad2(n.d)}`] = r.chance;
+    store.set("forecasts", fcs);
+  }
+  renderWeather();
+}
 async function loadWeather() {
   if (weatherBusy) return;
   weatherBusy = true;
   $("ball-refresh").textContent = "更新中…";
+  // the radar is slower (many images): start it now, fold it in when it arrives
+  const radarJob = loadRadar().catch(() => null);
   try {
     const q = new URLSearchParams({
       latitude: LAT, longitude: LNG, timezone: "Asia/Kuala_Lumpur", past_hours: 6, forecast_hours: 48,
       hourly: "precipitation_probability,precipitation,weather_code,cape,apparent_temperature",
     });
-    const [fc, air, warnings, radar] = await Promise.all([
+    const [fc, air, warnings] = await Promise.all([
       getJson("https://api.open-meteo.com/v1/forecast?" + q).catch(() => null),
       getJson(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LNG}&hourly=us_aqi&timezone=Asia%2FKuala_Lumpur&forecast_days=2`).catch(() => null),
       loadWarnings().catch(() => null),
-      loadRadar().catch(() => null),
     ]);
-    const { shift, samples } = personal();
-    const r = evaluateRain({
-      hourly: fc?.hourly, nowMs: Date.now(), startHour: state.startHour, durationHours: state.duration,
-      warnings: warnings || [], warningsOk: warnings != null, air: air?.hourly, shift, samples, radar,
-    });
-    r.updatedAt = Date.now();
-    state.weather = r;
-    if (r.level !== "unknown" && !r.tomorrow) {
-      // remember today's prediction, so a later 打成了/下雨了 tap is paired with it
-      const n = myt();
-      const fcs = store.get("forecasts", {});
-      fcs[`${n.y}-${pad2(n.m)}-${pad2(n.d)}`] = r.chance;
-      store.set("forecasts", fcs);
-    }
+    lastInputs = { fc, air, warnings };
+    evaluate(state.weather?.radar ?? null);
   } finally {
     weatherBusy = false;
     $("ball-refresh").textContent = "刷新";
-    renderWeather();
   }
+  const radar = await radarJob;
+  if (radar) evaluate(radar);
 }
 
 function chartSvg(bars) {
