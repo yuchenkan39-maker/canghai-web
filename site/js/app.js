@@ -548,9 +548,9 @@ async function loadWarnings() {
   const since = `${p.y}-${pad2(p.m)}-${pad2(p.d)} 00:00:00@warning_issue__issued`;
   let list;
   try {
-    list = await getJson(`https://api.data.gov.my/weather/warning?limit=100&timestamp_start=${encodeURIComponent(since)}`);
+    list = await getJson(`https://api.data.gov.my/weather/warning/?limit=100&timestamp_start=${encodeURIComponent(since)}`);
   } catch (e) {
-    list = await getJson("https://api.data.gov.my/weather/warning?limit=100");
+    list = await getJson("https://api.data.gov.my/weather/warning/?limit=100");
   }
   return list.map((w) => ({
     heading: [w.heading_en, w.heading_bm].filter(Boolean).join(" "),
@@ -655,6 +655,7 @@ async function loadWeather() {
     ]);
     lastInputs = { fc, air, warnings };
     evaluate(state.weather?.radar ?? null);
+    if (!fc) setTimeout(loadWeather, 30000); // a slow moment at the forecast service: try again shortly
   } finally {
     weatherBusy = false;
     $("ball-refresh").textContent = "刷新";
