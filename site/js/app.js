@@ -570,6 +570,19 @@ async function getJson(url, ms) {
   return r.json();
 }
 
+/** Open-Meteo sometimes leaves a request hanging while a fresh one answers in half a second: short limit, a few tries. */
+async function getJsonRetry(url, tries = 3, ms = 7000) {
+  let err;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await getJson(url, ms);
+    } catch (e) {
+      err = e;
+    }
+  }
+  throw err;
+}
+
 async function loadWarnings() {
   const p = myt(Date.now() - 2 * 86400000);
   const since = `${p.y}-${pad2(p.m)}-${pad2(p.d)} 00:00:00@warning_issue__issued`;
@@ -676,8 +689,8 @@ async function loadWeather() {
       hourly: "precipitation_probability,precipitation,weather_code,cape,apparent_temperature",
     });
     const [fc, air, warnings] = await Promise.all([
-      getJson("https://api.open-meteo.com/v1/forecast?" + q).catch(() => null),
-      getJson(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LNG}&hourly=us_aqi&timezone=Asia%2FKuala_Lumpur&forecast_days=2`).catch(() => null),
+      getJsonRetry("https://api.open-meteo.com/v1/forecast?" + q).catch(() => null),
+      getJsonRetry(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LNG}&hourly=us_aqi&timezone=Asia%2FKuala_Lumpur&forecast_days=2`).catch(() => null),
       loadWarnings().catch(() => null),
     ]);
     lastInputs = { fc, air, warnings };
