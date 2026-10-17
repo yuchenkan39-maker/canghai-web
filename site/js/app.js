@@ -785,7 +785,7 @@ const fxSettings = () => ({ target: store.get("fxTarget", null), above: store.ge
 async function loadFx() {
   const start = isoOf(dayNum(todayIso()) - 45);
   try {
-    state.fx = fxView(fxPoints(await getJson(`https://api.frankfurter.app/${start}..?from=MYR&to=CNY`)));
+    state.fx = fxView(fxPoints(await getJson(`https://api.frankfurter.dev/v1/${start}..?base=MYR&symbols=CNY`)));
   } catch (e) {
     if (!state.fx) $("fx").innerHTML = `<p class="muted">汇率暂时没取到，稍后再看</p>`;
     return;
