@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>季沧海助手</title>
+<meta name="description" content="T790 · T786 · PJ01 · PJ02 实时位置、到站倒计时和打球下雨指数">
+<meta name="theme-color" content="#F6F7FB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1117" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="季沧海助手">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root {
+  --bg: #F6F7FB; --surface: #FFFFFF; --surface2: #EEF1F7; --text: #1F2430; --muted: #687083; --line: #E3E7EF;
+  --primary: #2F5FB3; --on-primary: #fff; --chip: #FFFFFF; --chip-on: #DCE6FA;
+  --good: #1B7A46; --good-bg: #C9F2D8; --caution: #8A5A00; --caution-bg: #FFE0A8; --bad: #B3261E; --bad-bg: #FFDAD6;
+  --star: #FFB800; --shadow: 0 2px 10px rgba(20, 30, 60, .10); --radius: 18px;
+  --tile-filter: saturate(.35) brightness(1.06) contrast(.92);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1117; --surface: #181B22; --surface2: #222631; --text: #E7E9EF; --muted: #9AA3B2; --line: #2A2F3A;
+    --primary: #AFC6FF; --on-primary: #002D6E; --chip: #1E222B; --chip-on: #2B3A5C;
+    --good: #7FDCA2; --good-bg: #0E5130; --caution: #F5C16C; --caution-bg: #5E3F00; --bad: #FFB4AB; --bad-bg: #8C1D18;
+    --star: #FFC83D; --shadow: 0 2px 12px rgba(0, 0, 0, .45);
+    --tile-filter: invert(1) hue-rotate(180deg) saturate(.25) brightness(.78) contrast(.92);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.app { max-width: 1400px; margin: 0 auto; padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
+header { display: flex; align-items: center; gap: 12px; padding: calc(14px + env(safe-area-inset-top)) 0 10px; }
+header img { width: 40px; height: 40px; border-radius: 12px; }
+header h1 { margin: 0; font-size: 22px; letter-spacing: .5px; }
+header p { margin: 0; color: var(--muted); font-size: 13px; }
+.layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.layout > section { min-width: 0; }
+@media (min-width: 960px) {
+  .layout { grid-template-columns: minmax(0, 1.5fr) minmax(360px, 1fr); align-items: start; }
+  .map-col { position: sticky; top: 12px; }
+  .map-wrap { height: calc(100vh - 230px) !important; min-height: 520px; }
+}
+.card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+.card + .card { margin-top: 16px; }
+.card h2 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+.row { display: flex; align-items: center; gap: 10px; }
+.grow { flex: 1; min-width: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12.5px; background: var(--surface2); color: var(--muted); }
+.pill.on { background: var(--good-bg); color: var(--good); }
+.seg { display: flex; background: var(--surface2); border-radius: 12px; padding: 3px; margin: 12px 0 6px; }
+.seg button { flex: 1; border: 0; background: transparent; border-radius: 10px; padding: 8px 6px; min-height: 40px; color: var(--muted); }
+.seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
+.tag { display: inline-block; border-radius: 7px; padding: 1px 7px; color: #fff; font-weight: 700; font-size: 13px; letter-spacing: .3px; }
+.next { display: flex; align-items: center; gap: 10px; margin: 12px 0 4px; }
+.next .big { font-size: 30px; font-weight: 800; letter-spacing: .5px; }
+.list { display: grid; gap: 6px; margin-top: 6px; }
+.list .row { font-size: 15px; }
+.btn { border: 0; border-radius: 14px; background: var(--primary); color: var(--on-primary); padding: 12px 16px; min-height: 48px; width: 100%; font-weight: 600; font-size: 16px; }
+.btn.stop { background: var(--bad); color: #fff; }
+.btn.ghost { background: var(--surface2); color: var(--text); font-weight: 500; }
+.stepper { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.stepper button { width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--surface2); font-size: 20px; }
+.note { margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+/* map */
+.map-wrap { position: relative; height: 62vh; min-height: 380px; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: var(--surface2); }
+#map { position: absolute; inset: 0; }
+.leaflet-tile-pane { filter: var(--tile-filter); }
+.leaflet-container { background: var(--surface2); font: inherit; }
+.overlay { position: absolute; z-index: 500; pointer-events: none; }
+.overlay > * { pointer-events: auto; }
+.status { top: 12px; left: 12px; right: 60px; display: flex; flex-wrap: wrap; gap: 8px; }
+.status .pill { background: var(--surface); color: var(--text); box-shadow: var(--shadow); padding: 7px 13px; font-size: 13.5px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--caution); display: inline-block; }
+.dot.on { background: var(--good); }
+.chips { left: 0; right: 0; bottom: 12px; display: flex; gap: 8px; overflow-x: auto; padding: 0 12px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 12px; padding: 8px 13px; min-height: 40px; background: var(--chip); box-shadow: var(--shadow); font-weight: 700; color: var(--text); }
+.chip .sw { width: 11px; height: 11px; border-radius: 50%; }
+.chip.off { opacity: .55; font-weight: 500; }
+.chip.on-radar { background: var(--chip-on); }
+.fab { right: 12px; bottom: 64px; }
+.fab button { border: 0; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); padding: 12px 16px; font-weight: 700; color: var(--primary); }
+.attrib { left: 12px; bottom: 60px; font-size: 11px; color: var(--muted); background: color-mix(in srgb, var(--surface) 80%, transparent); padding: 1px 6px; border-radius: 6px; }
+.attrib a { color: inherit; }
+.toast { left: 50%; top: 58px; transform: translateX(-50%); background: var(--text); color: var(--bg); border-radius: 999px; padding: 8px 14px; font-size: 13.5px; max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: none; }
+/* bus cards */
+.buses { display: flex; gap: 10px; overflow-x: auto; padding: 12px 2px 4px; scrollbar-width: thin; }
+.bcard { flex: none; width: 250px; display: flex; gap: 12px; align-items: center; border: 2px solid transparent; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); padding: 10px 12px; text-align: left; }
+.bcard.sel { border-color: var(--c); }
+.bcard .t1 { display: flex; gap: 6px; align-items: center; font-weight: 700; }
+.bcard .t2 { font-size: 14px; }
+.bcard .t3, .bcard .t4 { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* markers */
+.bus-m { position: relative; width: 0; height: 0; }
+.bus-m .badge { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; background: var(--c); border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); display: grid; place-items: center; color: var(--c); }
+.bus-m.sel .badge { transform: scale(1.22); }
+.bus-m .arrow { position: absolute; left: -26px; top: -26px; width: 52px; height: 52px; }
+.bus-m .arrow::before { content: ""; position: absolute; left: 50%; top: -1px; transform: translateX(-50%); border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 10px solid var(--c); filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff); }
+.bus-m .lbl { position: absolute; top: 24px; left: 0; transform: translateX(-50%); white-space: nowrap; background: var(--surface); color: var(--text); border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 700; box-shadow: 0 1px 4px rgba(0,0,0,.22); }
+.bus-m .lbl b { color: var(--c); margin-right: 4px; }
+.star-m { position: relative; width: 0; height: 0; }
+.star-m svg { position: absolute; left: -16px; top: -16px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.3)); }
+.star-m .lbl { position: absolute; top: 17px; left: 0; transform: translateX(-50%); white-space: nowrap; background: var(--surface); color: var(--text); border: 1.5px solid var(--star); border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 700; }
+/* basketball */
+.verdict { border-radius: 16px; padding: 12px 16px; font-size: 24px; font-weight: 800; margin: 12px 0 8px; }
+.verdict.green { background: var(--good-bg); color: var(--good); }
+.verdict.yellow { background: var(--caution-bg); color: var(--caution); }
+.verdict.red { background: var(--bad-bg); color: var(--bad); }
+.verdict.unknown { background: var(--surface2); color: var(--muted); }
+.conds { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.conds .pill { font-size: 13px; padding: 4px 11px; }
+.pill.good { background: var(--good-bg); color: var(--good); }
+.pill.caution { background: var(--caution-bg); color: var(--caution); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.reasons { margin: 6px 0 0; padding-left: 18px; }
+.reasons li { margin: 2px 0; }
+.radar-line { margin-top: 8px; }
+.radar-line.warn { color: var(--caution); font-weight: 600; }
+.chart { margin-top: 12px; }
+.chart svg { width: 100%; height: 130px; display: block; }
+.settings { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+select { font: inherit; color: var(--text); background: var(--surface2); border: 0; border-radius: 10px; padding: 8px 10px; min-height: 40px; }
+.fb { display: flex; gap: 8px; margin-top: 12px; }
+.fb button { flex: 1; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <img src="icons/icon-192.png" alt="">
+    <div class="grow">
+      <h1>季沧海助手</h1>
+      <p>T790 · T786 · PJ01 · PJ02 实时位置 · 打球指数</p>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section class="map-col" aria-label="实时地图">
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div class="overlay status">
+          <span class="pill" id="live"><span class="dot" id="live-dot"></span><span id="live-text">正在连接实时数据…</span></span>
+        </div>
+        <div class="overlay toast" id="toast" role="status"></div>
+        <div class="overlay attrib">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · 雷达 <a href="https://www.rainviewer.com" target="_blank" rel="noopener">RainViewer</a></div>
+        <div class="overlay fab"><button id="fit" aria-label="看全线">全线</button></div>
+        <div class="overlay chips" id="chips" role="group" aria-label="显示哪几路车"></div>
+      </div>
+      <div class="buses" id="buses" aria-label="在跑的车"></div>
+    </section>
+
+    <section aria-label="出发与打球">
+      <div class="card" id="dep">
+        <div class="row">
+          <h2 class="grow">🚏 出发提醒</h2>
+          <span class="pill" id="alert-state">未启动</span>
+        </div>
+        <div class="seg" role="tablist" id="trips"></div>
+        <div class="muted small" id="trip-desc"></div>
+        <div id="arrivals"></div>
+        <div style="margin-top:12px"><button class="btn" id="alert-btn"></button></div>
+        <div class="stepper">
+          <button id="lead-minus" aria-label="少提前一分钟">−</button>
+          <span class="grow" id="lead-text"></span>
+          <button id="lead-plus" aria-label="多提前一分钟">+</button>
+        </div>
+        <p class="note">到站时间按车在线路上的距离和实测平均车速估算（含停站和红绿灯），不是官方时刻。网页开着时才会提醒：手机锁屏或关掉网页就不会响，需要后台提醒请用手机 App。</p>
+      </div>
+
+      <div class="card" id="ball">
+        <div class="row">
+          <h2 class="grow">🏀 打球指数</h2>
+          <button class="pill" id="ball-refresh" style="border:0">刷新</button>
+        </div>
+        <div class="muted small" id="ball-window"></div>
+        <div id="ball-body"><p class="muted">正在获取天气…</p></div>
+        <div class="settings">
+          <span class="muted small">打球时段</span>
+          <select id="start-hour" aria-label="几点开始"></select>
+          <select id="duration" aria-label="打多久"></select>
+        </div>
+        <hr>
+        <div class="muted small">今天实际怎么样？点一下，满 8 天后会按你的球场微调：</div>
+        <div class="fb">
+          <button class="btn ghost" id="fb-played">🏀 打成了</button>
+          <button class="btn ghost" id="fb-rained">🌧 下雨了</button>
+        </div>
+        <div class="muted small" id="fb-count" style="margin-top:8px"></div>
+      </div>
+    </section>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
