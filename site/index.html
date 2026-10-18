@@ -152,16 +152,27 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 .hol + .hol { border-top: 1px solid var(--line); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 </style>
+<link rel="stylesheet" href="crew.css?v=1">
 </head>
 <body>
 <div class="app">
   <header>
-    <img src="icons/icon-192.png" alt="">
+    <img src="assets/crew/dog.jpg" alt="" width="50" height="50">
     <div class="grow">
       <h1>季沧海助手</h1>
-      <p>T790 · T786 · PJ01 · PJ02 实时位置 · 打球指数 · 汇率假期</p>
+      <p>你的出门与生活搭子 · 马大 / 八打灵</p>
     </div>
   </header>
+
+  <section class="crew-hero" aria-label="出门小分队">
+    <div><div class="eyebrow">沧海出门小分队</div><h2>今天也从容出发</h2><p>看好下一班车，挑个好天气。</p></div>
+    <div class="crew-team">
+      <div class="crew-member" style="--route:#2F7FED"><img class="crew-avatar" src="assets/crew/dog.jpg" alt="" width="38" height="38" decoding="async"><span>T790</span></div>
+      <div class="crew-member" style="--route:#0E9F76"><img class="crew-avatar" src="assets/crew/gentleman.jpg" alt="" width="38" height="38" decoding="async"><span>T786</span></div>
+      <div class="crew-member" style="--route:#8B5CF6"><img class="crew-avatar" src="assets/crew/hamster.jpg" alt="" width="38" height="38" decoding="async"><span>PJ01</span></div>
+      <div class="crew-member" style="--route:#E5487F"><img class="crew-avatar" src="assets/crew/cat.jpg" alt="" width="38" height="38" decoding="async"><span>PJ02</span></div>
+    </div>
+  </section>
 
   <div class="layout">
     <section class="map-col" aria-label="实时地图">
@@ -181,7 +192,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
     <section aria-label="出发与打球">
       <div class="card" id="dep">
         <div class="row">
-          <h2 class="grow">🚏 出发提醒</h2>
+          <h2 class="grow"><img class="crew-avatar" src="assets/crew/dog.jpg" alt="" width="38" height="38" decoding="async">出发提醒</h2>
           <span class="pill" id="alert-state">未启动</span>
         </div>
         <div class="seg" role="tablist" id="trips"></div>
@@ -200,7 +211,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 
       <div class="card" id="ball">
         <div class="row">
-          <h2 class="grow">🏀 打球指数</h2>
+          <h2 class="grow"><img class="crew-avatar" src="assets/crew/hamster.jpg" alt="" width="38" height="38" decoding="async">打球指数</h2>
           <button class="pill" id="ball-refresh" style="border:0">刷新</button>
         </div>
         <div class="muted small" id="ball-window"></div>
@@ -222,7 +233,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
       </div>
 
       <div class="card" id="life">
-        <h2>💱 汇率 · 📅 假期</h2>
+        <h2><img class="crew-avatar" src="assets/crew/gentleman.jpg" alt="" width="38" height="38" decoding="async">汇率 · 假期</h2>
         <div id="fx"><p class="muted">正在获取汇率…</p></div>
         <div class="target">
           <span class="muted small">到价提示</span>
@@ -239,8 +250,18 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
       </div>
     </section>
   </div>
+  <footer class="site-footer">
+    <span>季沧海助手 · 一个人的出门小工具</span>
+    <details class="author-corner">
+      <summary aria-label="作者的小角落" title="一个小角落">✦</summary>
+      <div class="author-note">
+        <img class="crew-avatar" src="assets/crew/author.jpg" alt="作者的牛仔装扮照片" width="56" height="56" loading="lazy">
+        <p>作者偶尔也来巡逻一下。<small>祝你每次出门，都刚好赶上。</small></p>
+      </div>
+    </details>
+  </footer>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script type="module" src="js/app.js"></script>
+<script type="module" src="js/app.js?v=crew1"></script>
 </body>
 </html>

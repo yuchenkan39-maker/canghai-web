@@ -33,6 +33,11 @@ const colorOf = (id) => {
 };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
+// UI portraits are fixed local assets; route ids come from the existing feed.
+const CREW = { T7900: "dog", T7860: "gentleman", P0010: "hamster", P0020: "cat" };
+const portrait = (route) => `<img class="crew-avatar" src="assets/crew/${CREW[route] || "dog"}.jpg" alt="" width="38" height="38" decoding="async">`;
+
+
 const state = {
   bundle: null,
   index: null,
@@ -250,7 +255,6 @@ const busLayer = L.layerGroup().addTo(map);
 let radarLayer = null;
 const busMarkers = new Map();
 
-const FACE = `<svg width="24" height="24" viewBox="-6 -6.4 12 12" aria-hidden="true"><g fill="#fff"><rect x="-4.1" y="2.4" width="2.1" height="2.6" rx=".7"/><rect x="2" y="2.4" width="2.1" height="2.6" rx=".7"/><rect x="-5" y="-5.8" width="10" height="9.8" rx="2.7"/></g><rect x="-3.7" y="-4.4" width="7.4" height="4.2" rx="1.2" fill="currentColor"/><rect x="-3" y="-3.8" width=".8" height="3" rx=".4" fill="#fff" opacity=".5"/><circle cx="-2.5" cy="1.9" r=".85" fill="currentColor"/><circle cx="2.5" cy="1.9" r=".85" fill="currentColor"/><path d="M-1.1 1.6 Q0 2.9 1.1 1.6" stroke="currentColor" stroke-width=".7" fill="none" stroke-linecap="round"/></svg>`;
 const STAR = (c) => `<svg width="32" height="32" viewBox="-16 -16 32 32" aria-hidden="true"><path d="${starPath(14, 6.7)}" fill="${c}" stroke="#fff" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke"/></svg>`;
 function starPath(R, r) {
   let d = "";
@@ -308,7 +312,7 @@ function busHtml(b, sel, compact) {
   const name = routeById(b.route)?.name || b.route;
   const arrow = b.angle == null ? "" : `<div class="arrow" style="transform:rotate(${b.angle}deg)"></div>`;
   const label = compact && !sel ? `<b>${name}</b>` : `<b>${name}</b>${esc(b.id)}`;
-  return `<div class="bus-m${sel ? " sel" : ""}" style="--c:${colorOf(b.route)}">${arrow}<div class="badge">${FACE}</div><span class="lbl">${label}</span></div>`;
+  return `<div class="bus-m${sel ? " sel" : ""}" style="--c:${colorOf(b.route)}">${arrow}<div class="badge">${portrait(b.route)}</div><span class="lbl">${label}</span></div>`;
 }
 function renderBusMarkers() {
   const compact = map.getZoom() < 14.5;
@@ -378,8 +382,9 @@ function renderChips() {
     const n = counts[r.id] || 0;
     const btn = document.createElement("button");
     btn.className = "chip" + (on ? "" : " off");
+    btn.style.setProperty("--route", on ? colorOf(r.id) : "var(--line)");
     btn.setAttribute("aria-pressed", String(on));
-    btn.innerHTML = `<span class="sw" style="background:${on ? colorOf(r.id) : "var(--line)"}"></span>${r.name}${n ? " · " + n : ""}`;
+    btn.innerHTML = `${portrait(r.id)}${r.name}${n ? " · " + n : ""}`;
     btn.onclick = () => {
       on ? state.shown.delete(r.id) : state.shown.add(r.id);
       store.set("routes", [...state.shown]);
@@ -424,7 +429,7 @@ function renderBusCards() {
   const el = $("buses");
   const list = shownBuses();
   if (!list.length) {
-    el.innerHTML = `<div class="bcard" style="width:auto"><span class="muted">${state.connected ? (state.shown.size ? "选中的线路现在没有车在跑 🚌💤" : "在地图下面选一条线路看看") : esc(state.status)}</span></div>`;
+    el.innerHTML = `<div class="bcard empty-crew" style="width:auto">${portrait("P0020")}<span class="muted">${state.connected ? (state.shown.size ? "选中的线路现在没有车在跑 🚌💤" : "在地图下面选一条线路看看") : esc(state.status)}</span></div>`;
     return;
   }
   el.innerHTML = list.map((b) => {
@@ -434,7 +439,7 @@ function renderBusCards() {
     const speed = b.speed == null ? null : b.speed === 0 ? "停着" : `${b.speed} km/h`;
     const c = colorOf(b.route);
     return `<button class="bcard${key === state.selected ? " sel" : ""}" style="--c:${c}" data-key="${esc(key)}">
-      <span class="bus-m" style="--c:${c};width:44px;height:44px;flex:none"><span class="badge" style="left:4px;top:4px">${FACE}</span></span>
+      ${portrait(b.route)}
       <span class="grow">
         <span class="t1"><span class="tag" style="background:${c}">${routeById(b.route)?.name}</span>${esc(b.id)}</span>
         <span class="t2" style="display:block">${prog ? towards(prog.line) : "方向未知"}</span>
